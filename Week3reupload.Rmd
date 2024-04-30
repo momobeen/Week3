@@ -1,0 +1,111 @@
+---
+title: "NYDP Shooting Incident Data - Analysis:"
+author: "M.M"
+date: "2024-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Importing Data:
+
+First we will begin by importing our data in a reproducable manner. The URL for the CSV file is as follows: "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD". Since this URL is a relative path the process of importing our data is easily reproducible for anyone collaborating on this project. In the second line of code we will be creating a data object for the whole data set, which will be tidied in the next step.
+
+```{r get_NYCshooting_data}
+url_in <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+unmodified_NYC_data <- read.csv(url_in)
+
+```
+
+
+## Tidying Data:
+
+The next step is to decide on the parameters for analysis. For the following analysis I've decided to look at the distribution of crime in each boro, by  perp race, and by month of the year.
+
+In order to prepare the data we must first select the columns we care about:
+
+```{r slecting_data}
+NYC_Data <- unmodified_NYC_data[, c("OCCUR_DATE", "BORO", "PERP_RACE")]
+
+```
+
+Next, we will look at the data we have and prepare it for analysis. From running ```show(NYC_Data)``` we can see that the date isn't in the right format, it is currently a string, and we have to deal with the missing values for "PERP_RACE".
+
+##### 1. Cleaning PERP_RACE
+
+From looking at the data set we can see there are cases where the values are missing, sometimes they are (null), and sometimes they are "UNKNOWN". I want to clean this data such that it shows "UNKNOWN" for all three of these cases. The code is as follows:
+
+```{r NYC_Data$PERP_RACE}
+NYC_Data$PERP_RACE <- ifelse(is.na(NYC_Data$PERP_RACE) | NYC_Data$PERP_RACE == "" | NYC_Data$PERP_RACE == "(null)", "UNKNOWN", NYC_Data$PERP_RACE)
+```
+
+##### 2. Cleaning "OCCUR_DATE" to be in date format, and creating a new column for the month number.
+
+This step requires the installation of the libraries: dplyr and lubridate.
+
+```
+install.packages("dplyr")
+install.packages("lubridate")
+```
+
+```{r NYC_Data$OCCUR_DATE}
+library(dplyr)
+library(lubridate)
+
+NYC_Data <- mutate(NYC_Data, OCCUR_DATE = mdy(OCCUR_DATE))
+NYC_Data <- mutate(NYC_Data, OCCUR_MONTH = month(OCCUR_DATE))
+```
+
+All the data is now cleaned to our specifications and ready to be visualized for analysis.
+
+```{r NYC_Data}
+summary(NYC_Data)
+```
+
+## Visualizing Data
+
+First we will look at the distribution of incidents per month where 1 =January, 2=February, and so on.
+
+```{r plot1, echo="true"}
+library(ggplot2)
+
+ggplot(NYC_Data, aes(x = OCCUR_MONTH)) +
+    geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+    labs(title = "Histogram of OCCUR_MONTH", x = "Date", y = "Frequency") +
+    scale_x_continuous(breaks = 0:12)
+```
+
+Next we will create a pie chart to visualize the distribution of incidence per "PERP_RACE".
+
+```{r plot2, echo="true"}
+
+ggplot(NYC_Data, aes(x = "", fill = PERP_RACE)) +
+  geom_bar(width = 1) +
+  geom_text(aes(label = after_stat(count)), stat = "count", position = position_stack(vjust = 0.5), size = 3) +
+  coord_polar("y") +
+  labs(title = "Distribution of Incidents by Perpetrator Race")
+```
+
+Finally, we will create a model.This simple linear model predicts the occurrence month of incidents based on the boro where the incident occurred. The coefficients from the summary are then understood to model the relationship between the boro and the occurrence month.
+
+```{r linear_model, echo="true"}
+# Fit linear model
+linear_model <- lm(OCCUR_MONTH ~ BORO, data = NYC_Data)
+
+# Summarize the model
+summary(linear_model)
+```
+
+## Conclusion:
+
+First in looking at the histogram for OCCUR_MONTH we can see that the summer and spring months have significantly higher reported incidence, and this tapers down significantly in winter and fall months. This makes sense as NYC is really cold, and less people are out of their homes during colder periods. Second the pie chart tells us that most incidence happened from the following races respectively: Black, White Hispanic, and Black Hispanic. 
+
+In looking at the linear model, the model aimed to predict the occurrence month of incidents based on the borough where the incident occurred. We can quickly see that this model is limited in what it tells us as shown by the low R-squared value. This tells us that the boro alone is not a strong predictor of the occurence month for an incident. Other factors need to be considered to make a better prediction.
+
+One must also consider potential biases in our data set. There exists a measurement bias as the perpetrator's race is dependent on the judgement of the law enforcement officer. For example the officer had to make a judgement on whether an individual was a dark hispanic or a white hispanic, which is relative depending on the officers judgement. Further, there was a lot of missing data regarding the perpetrator's race so this could have skewed our findings.
+
+Also, a confounding bias exists as the observed relationship between boro and occurrence could have been impacted by factors such as socioeconomic status, times of heightened instability, and population density. These factors were not accounted for in our analysis, and may lead to biases in our findings. In order to mitigate this more knowledge is needed on factors in each of the boros. 
+
+In conclusion, this analysis gives us some insight into the months of the year where an incident may take place, the race of the perpetrator, and the potential relationship between the incidence in a boro and the occurance month. These findings can be useful for law enforcement, or policy makers for addressing factors that contribute to crime in the different boro's of NYC.
